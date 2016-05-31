@@ -332,11 +332,17 @@ floatX = config.floatX
 #    return similarity
 
 
-def build_model( shared_params  , options  ):
+def build_model( options  ):
     trng=RandomStreams(1234)
     drop_ratio=options['drop_ratio']
     batch_size=options['batch_size']
     n_dim=options['n_dim']
+    n_words=options[ 'n_words']
+    n_emb=options['n_emb']
+    n_image_feat=options[ 'n_image_feat'  ]
+    n_common_feat=options[ 'n_common_feat' ]
+    n_output=options[ 'n_output' ]
+    n_attention=options[ 'n_attention' ]
 
     # get the transformed image features
     h_0=tf.placeholder( shape=( None,n_dim ) , dtype=tf.float32  )
@@ -358,11 +364,11 @@ def build_model( shared_params  , options  ):
 
     h_encode=h_encode[-1]  -- check the dimension
 
-    image_feat_down=tflearn.fully_connected( image_feat , dim -- has to be figured )
+    image_feat_down=tflearn.fully_connected( image_feat ,n_dim) # dim -- has to be figured )
 
-    image_feat_attention_1=tflearn.fully_connected( image_feat_down , dim -- has to be figured   )
+    image_feat_attention_1=tflearn.fully_connected( image_feat_down , n_attention)   # dim -- has to be figured   )
 
-    h_encode_attention_1=tflearn.fully_connected( h_encode , dim -- has to be figured  )
+    h_encode_attention_1=tflearn.fully_connected( h_encode , n_attention) # dim -- has to be figured  )
 
     combined_feat_attention_1 = image_feat_attention_1 + \
                                 h_encode_attention_1[:, None, :]
@@ -370,8 +376,8 @@ def build_model( shared_params  , options  ):
     if options['use_attention_drop']:
         combined_feat_attention_1 = tflearn.dropout(combined_feat_attention_1,drop_ratio)
 
-    combined_feat_attention_1 = tflearn.fully_connected(combined_feat_attention_1 , dim -- to be determined  )
-    prob_attention_1 = T.nnet.softmax(combined_feat_attention_1[:, :, 0])
+    combined_feat_attention_1 = tflearn.fully_connected(combined_feat_attention_1 , 1) # dim -- to be determined  )
+    prob_attention_1 = tf.nn.softmax(combined_feat_attention_1[:, :, 0])
     image_feat_ave_1 = (prob_attention_1[:, :, None] * image_feat_down).sum(axis=1)
 
     combined_hidden_1 = image_feat_ave_1 + h_encode
@@ -379,16 +385,16 @@ def build_model( shared_params  , options  ):
 
     # Second Layer Attention Model
 
-    image_feat_attention_2 = tflearn.fully_connected(image_feat_down, dim -- to be determined  )
-    h_encode_attention_2 = tflearn.fully_connected(combined_hidden_1 , dim --to be dertermined  )
+    image_feat_attention_2 = tflearn.fully_connected(image_feat_down,  n_attention)  # dim -- to be determined  )
+    h_encode_attention_2 = tflearn.fully_connected(combined_hidden_1 , n_attention)  # dim --to be dertermined  )
 
 
     combined_feat_attention_2 = image_feat_attention_2 + h_encode_attention_2[:, None, :]
     if options['use_attention_drop']:
         combined_feat_attention_2 = tflearn.dropout(combined_feat_attention_2,drop_ratio)
 
-    combined_feat_attention_2 = fflayer(combined_feat_attention_2,dim -- to be determined)
-    prob_attention_2 = T.nnet.softmax(combined_feat_attention_2[:, :, 0])
+    combined_feat_attention_2 = fflayer(combined_feat_attention_2,1)              #dim -- to be determined)
+    prob_attention_2 = tf.nn.softmax(combined_feat_attention_2[:, :, 0])
 
     image_feat_ave_2 = (prob_attention_2[:, :, None] * image_feat_down).sum(axis=1)
 
@@ -400,10 +406,16 @@ def build_model( shared_params  , options  ):
     for i in range(options['combined_num_mlp']):
         if options.get('combined_mlp_drop_%d'%(i), False):
             combined_hidden = tflearn.dropout(combined_hidden,drop_ratio)
-        if i == options['combined_num_mlp'] - 1:
-            combined_hidden = tflearn.fully_connected(combined_hidden, dim -- to be determined )
+        if i==0 and options[ 'combined_num_mlp'  ]==1:
+            combined_hidden=tflearn.fully_connected( combined_hidden , n_output  )
+
+        elif i==0 and options['combined_num_mlp'] != 1:
+            combined_hidden = tflearn.fully_connected( combined_hidden , n_common_feat )
+
+        elif i == options['combined_num_mlp'] - 1:
+            combined_hidden = tflearn.fully_connected(combined_hidden, n_output) # dim -- to be determined )
         else:
-            combined_hidden = tflearn.fully_connected(combined_hidden, dim --to be determined)
+            combined_hidden = tflearn.fully_connected(combined_hidden, n_common_feat)   #dim --to be determined)
 
     # drop the image output
     prob = tf.nn.softmax(combined_hidden)
@@ -417,123 +429,123 @@ def build_model( shared_params  , options  ):
         label, dropout, cost, accu
 
 
-def build_model(shared_params, options):
-    trng = RandomStreams(1234)
-    drop_ratio = options['drop_ratio']
-    batch_size = options['batch_size']
-    n_dim = options['n_dim']
-
-    w_emb = shared_params['w_emb']
-
-    dropout = theano.shared(numpy.float32(0.))
-    image_feat = T.ftensor3('image_feat')
-    # T x batch_size
-    input_idx = T.imatrix('input_idx')
-    input_mask = T.matrix('input_mask')
-    # label is the TRUE label
-    label = T.ivector('label')
-
-    empty_word = theano.shared(value=np.zeros((1, options['n_emb']),
-                                              dtype='float32'),
-                               name='empty_word')
-    w_emb_extend = T.concatenate([empty_word, shared_params['w_emb']],
-                                 axis=0)
-    input_emb = w_emb_extend[input_idx]
-
-    # get the transformed image feature
-    h_0 = theano.shared(numpy.zeros((batch_size, n_dim), dtype='float32'))
-    c_0 = theano.shared(numpy.zeros((batch_size, n_dim), dtype='float32'))
-
-    if options['sent_drop']:
-        input_emb = dropout_layer(input_emb, dropout, trng, drop_ratio)
-
-    h_encode, c_encode = lstm_layer(shared_params, input_emb, input_mask,
-                                    h_0, c_0, options, prefix='sent_lstm')
-    # pick the last one as encoder
-    h_encode = h_encode[-1]
-    image_feat_down = fflayer(shared_params, image_feat, options,
-                              prefix='image_mlp',
-                              act_func=options.get('image_mlp_act',
-                                                   'tanh'))
-
-    image_feat_attention_1 = fflayer(shared_params, image_feat_down, options,
-                                     prefix='image_att_mlp_1',
-                                     act_func=options.get('image_att_mlp_act',
-                                                          'tanh'))
-    h_encode_attention_1 = fflayer(shared_params, h_encode, options,
-                                   prefix='sent_att_mlp_1',
-                                   act_func=options.get('sent_att_mlp_act',
-                                                        'tanh'))  #
-    combined_feat_attention_1 = image_feat_attention_1 + \
-                                h_encode_attention_1[:, None, :]
-    if options['use_attention_drop']:
-        combined_feat_attention_1 = dropout_layer(combined_feat_attention_1,
-                                                  dropout, trng, drop_ratio)
-    combined_feat_attention_1 = fflayer(shared_params,
-                                        combined_feat_attention_1, options,
-                                        prefix='combined_att_mlp_1',
-                                        act_func=options.get(
-                                            'combined_att_mlp_act',
-                                            'tanh'))
-    prob_attention_1 = T.nnet.softmax(combined_feat_attention_1[:, :, 0])
-    image_feat_ave_1 = (prob_attention_1[:, :, None] * image_feat_down).sum(axis=1)
-
-    combined_hidden_1 = image_feat_ave_1 + h_encode
-
-    # second layer attention model
-    image_feat_attention_2 = fflayer(shared_params, image_feat_down, options,
-                                     prefix='image_att_mlp_2',
-                                     act_func=options.get('image_att_mlp_act',
-                                                          'tanh'))
-    h_encode_attention_2 = fflayer(shared_params, combined_hidden_1, options,
-                                   prefix='sent_att_mlp_2',
-                                   act_func=options.get('sent_att_mlp_act',
-                                                        'tanh'))
-    combined_feat_attention_2 = image_feat_attention_2 + \
-                                h_encode_attention_2[:, None, :]
-    if options['use_attention_drop']:
-        combined_feat_attention_2 = dropout_layer(combined_feat_attention_2,
-                                                  dropout, trng, drop_ratio)
-
-    combined_feat_attention_2 = fflayer(shared_params,
-                                        combined_feat_attention_2, options,
-                                        prefix='combined_att_mlp_2',
-                                        act_func=options.get(
-                                            'combined_att_mlp_act', 'tanh'))
-    prob_attention_2 = T.nnet.softmax(combined_feat_attention_2[:, :, 0])
-
-    image_feat_ave_2 = (prob_attention_2[:, :, None] * image_feat_down).sum(axis=1)
-
-    if options.get('use_final_image_feat_only', False):
-        combined_hidden = image_feat_ave_2 + h_encode
-    else:
-        combined_hidden = image_feat_ave_2 + combined_hidden_1
-
-    for i in range(options['combined_num_mlp']):
-        if options.get('combined_mlp_drop_%d'%(i), False):
-            combined_hidden = dropout_layer(combined_hidden, dropout, trng,
-                                            drop_ratio)
-        if i == options['combined_num_mlp'] - 1:
-            combined_hidden = fflayer(shared_params, combined_hidden, options,
-                                      prefix='combined_mlp_%d'%(i),
-                                      act_func='linear')
-        else:
-            combined_hidden = fflayer(shared_params, combined_hidden, options,
-                                      prefix='combined_mlp_%d'%(i),
-                                      act_func=options.get('combined_mlp_act_%d'%(i),
-                                                           'tanh'))
-
-    # drop the image output
-    prob = T.nnet.softmax(combined_hidden)
-    prob_y = prob[T.arange(prob.shape[0]), label]
-    pred_label = T.argmax(prob, axis=1)
-    # sum or mean?
-    cost = -T.mean(T.log(prob_y))
-    accu = T.mean(T.eq(pred_label, label))
-
-    return image_feat, input_idx, input_mask, \
-        label, dropout, cost, accu
-    # return image_feat, input_idx, input_mask, \
-        # label, dropout, cost, accu, pred_label
-
-        # h_encode, c_encode, h_decode, c_decode
+#def build_model(shared_params, options):
+#    trng = RandomStreams(1234)
+#    drop_ratio = options['drop_ratio']
+#    batch_size = options['batch_size']
+#    n_dim = options['n_dim']
+#
+#    w_emb = shared_params['w_emb']
+#
+#    dropout = theano.shared(numpy.float32(0.))
+#    image_feat = T.ftensor3('image_feat')
+#    # T x batch_size
+#    input_idx = T.imatrix('input_idx')
+#    input_mask = T.matrix('input_mask')
+#    # label is the TRUE label
+#    label = T.ivector('label')
+#
+#    empty_word = theano.shared(value=np.zeros((1, options['n_emb']),
+#                                              dtype='float32'),
+#                               name='empty_word')
+#    w_emb_extend = T.concatenate([empty_word, shared_params['w_emb']],
+#                                 axis=0)
+#    input_emb = w_emb_extend[input_idx]
+#
+#    # get the transformed image feature
+#    h_0 = theano.shared(numpy.zeros((batch_size, n_dim), dtype='float32'))
+#    c_0 = theano.shared(numpy.zeros((batch_size, n_dim), dtype='float32'))
+#
+#    if options['sent_drop']:
+#        input_emb = dropout_layer(input_emb, dropout, trng, drop_ratio)
+#
+#    h_encode, c_encode = lstm_layer(shared_params, input_emb, input_mask,
+#                                    h_0, c_0, options, prefix='sent_lstm')
+#    # pick the last one as encoder
+#    h_encode = h_encode[-1]
+#    image_feat_down = fflayer(shared_params, image_feat, options,
+#                              prefix='image_mlp',
+#                              act_func=options.get('image_mlp_act',
+#                                                   'tanh'))
+#
+#    image_feat_attention_1 = fflayer(shared_params, image_feat_down, options,
+#                                     prefix='image_att_mlp_1',
+#                                     act_func=options.get('image_att_mlp_act',
+#                                                          'tanh'))
+#    h_encode_attention_1 = fflayer(shared_params, h_encode, options,
+#                                   prefix='sent_att_mlp_1',
+#                                   act_func=options.get('sent_att_mlp_act',
+#                                                        'tanh'))  #
+#    combined_feat_attention_1 = image_feat_attention_1 + \
+#                                h_encode_attention_1[:, None, :]
+#    if options['use_attention_drop']:
+#        combined_feat_attention_1 = dropout_layer(combined_feat_attention_1,
+#                                                  dropout, trng, drop_ratio)
+#    combined_feat_attention_1 = fflayer(shared_params,
+#                                        combined_feat_attention_1, options,
+#                                        prefix='combined_att_mlp_1',
+#                                        act_func=options.get(
+#                                            'combined_att_mlp_act',
+#                                            'tanh'))
+#    prob_attention_1 = T.nnet.softmax(combined_feat_attention_1[:, :, 0])
+#    image_feat_ave_1 = (prob_attention_1[:, :, None] * image_feat_down).sum(axis=1)
+#
+#    combined_hidden_1 = image_feat_ave_1 + h_encode
+#
+#    # second layer attention model
+#    image_feat_attention_2 = fflayer(shared_params, image_feat_down, options,
+#                                     prefix='image_att_mlp_2',
+#                                     act_func=options.get('image_att_mlp_act',
+#                                                          'tanh'))
+#    h_encode_attention_2 = fflayer(shared_params, combined_hidden_1, options,
+#                                   prefix='sent_att_mlp_2',
+#                                   act_func=options.get('sent_att_mlp_act',
+#                                                        'tanh'))
+#    combined_feat_attention_2 = image_feat_attention_2 + \
+#                                h_encode_attention_2[:, None, :]
+#    if options['use_attention_drop']:
+#        combined_feat_attention_2 = dropout_layer(combined_feat_attention_2,
+#                                                  dropout, trng, drop_ratio)
+#
+#    combined_feat_attention_2 = fflayer(shared_params,
+#                                        combined_feat_attention_2, options,
+#                                        prefix='combined_att_mlp_2',
+#                                        act_func=options.get(
+#                                            'combined_att_mlp_act', 'tanh'))
+#    prob_attention_2 = T.nnet.softmax(combined_feat_attention_2[:, :, 0])
+#
+#    image_feat_ave_2 = (prob_attention_2[:, :, None] * image_feat_down).sum(axis=1)
+#
+#    if options.get('use_final_image_feat_only', False):
+#        combined_hidden = image_feat_ave_2 + h_encode
+#    else:
+#        combined_hidden = image_feat_ave_2 + combined_hidden_1
+#
+#    for i in range(options['combined_num_mlp']):
+#        if options.get('combined_mlp_drop_%d'%(i), False):
+#            combined_hidden = dropout_layer(combined_hidden, dropout, trng,
+#                                            drop_ratio)
+#        if i == options['combined_num_mlp'] - 1:
+#            combined_hidden = fflayer(shared_params, combined_hidden, options,
+#                                      prefix='combined_mlp_%d'%(i),
+#                                      act_func='linear')
+#        else:
+#            combined_hidden = fflayer(shared_params, combined_hidden, options,
+#                                      prefix='combined_mlp_%d'%(i),
+#                                      act_func=options.get('combined_mlp_act_%d'%(i),
+#                                                           'tanh'))
+#
+#    # drop the image output
+#    prob = T.nnet.softmax(combined_hidden)
+#    prob_y = prob[T.arange(prob.shape[0]), label]
+#    pred_label = T.argmax(prob, axis=1)
+#    # sum or mean?
+#    cost = -T.mean(T.log(prob_y))
+#    accu = T.mean(T.eq(pred_label, label))
+#
+#    return image_feat, input_idx, input_mask, \
+#        label, dropout, cost, accu
+#    # return image_feat, input_idx, input_mask, \
+#        # label, dropout, cost, accu, pred_label
+#
+#        # h_encode, c_encode, h_decode, c_decode
