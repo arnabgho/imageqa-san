@@ -17,7 +17,7 @@ import tflearn
 
 
 def build_model( options  ):
-    trng=RandomStreams(1234)
+   # trng=RandomStreams(1234)
     drop_ratio=options['drop_ratio']
     batch_size=options['batch_size']
     n_dim=options['n_dim']
@@ -30,17 +30,27 @@ def build_model( options  ):
 
     with tf.Graph().as_default():
     # get the transformed image features
-        h_0=tf.placeholder( shape=( None,n_dim ) , dtype=tf.float32  )
-        c_0=tf.placeholder( shape=( None,n_dim ) , dtype=tf.float32  )
+        #h_0=tf.placeholder( shape=( None,n_dim ) , dtype=tf.float32  )
+        #c_0=tf.placeholder( shape=( None,n_dim ) , dtype=tf.float32  )
 
         image_feat=tf.placeholder( shape=( None , n_image_feat  ) ,dtype=tf.float32  )
 
+        max_length=tf.placeholder(tf.int32)
         # index of the input
-        input_idx
+        input_idx=tf.placeholder( shape=( None, None ) ,dtype=tf.int32)
+
+        #label as input
+        label=tf.placeholder( shape=batch_size,dtype=tf.int32)
+
         # input mask
-        input_mask
+        #input_mask=tf.placeholder( shape=(None,n_words) , dtype= tf.float32  )
+
+        input_mask=tf.zeros_like( input_idx )
+
         # input embedding
-        input_emb
+        w_emb= tf.Variable(tf.random_uniform([n_words, n_emb], -1.0, 1.0),name="Embedding_Matrix")
+
+        input_emb=w_emb[ input_idx ]
 
         if options['sent_drop']:
             input_emb=tflearn.dropout(input_emb,drop_ratio)

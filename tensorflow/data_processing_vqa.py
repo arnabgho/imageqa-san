@@ -15,7 +15,7 @@ def process_batch(batch_question, reverse=False):
         else:
             input_idx[0:question_length[i], i] = question[0:question_length[i]]
         input_mask[0:question_length[i], i] = 1.0
-    return input_idx, input_mask
+    return input_idx, input_mask , max_length
 
 def get_label_idx(n_output, batch_size):
     label_idx = np.zeros((n_output, batch_size), dtype='int32')
