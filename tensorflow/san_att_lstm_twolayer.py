@@ -81,6 +81,10 @@ options['disp_interval'] = 10
 options['eval_interval'] = 1000
 options['save_interval'] = 500
 
+
+# maximum length
+options['max_length']=500
+
 def get_lr(options, curr_epoch):
     if options['optimization'] == 'sgd':
         power = max((curr_epoch - options['step_start']) / options['step'], 0)
@@ -208,7 +212,8 @@ def train(options):
                 batch_image_feat, batch_question, batch_answer_label \
                     = data_provision_att_vqa.next_batch(options['train_split'], batch_size)
             input_idx, input_mask,max_length \
-                = process_batch(batch_question, reverse=options['reverse'])
+                = process_batch(options,batch_question, reverse=options['reverse'])
+            options['max_length']=max(max_length, options['max_length'] )
             batch_image_feat = reshape_image_feat(batch_image_feat,
                                                   options['num_region'],
                                                   options['region_dim'])
@@ -216,9 +221,9 @@ def train(options):
             #[cost, accu] = f_train(batch_image_feat, input_idx, input_mask,
             #                       batch_answer_label.astype('int32').flatten())
 
-            sess.run( optimizer , feed_dict={ max_length:max_length, image_feat:batch_image_feat,input_idx:input_idx,label:batch_answer_label.astype( 'int32' ).flatten()  }  )
-            cost= sess.run( cost , feed_dict={ max_length:max_length,image_feat:batch_image_feat,input_idx:input_idx,label:batch_answer_label.astype( 'int32' ).flatten()  }  )
-            accu=  sess.run( accu , feed_dict={ max_length:max_length,image_feat:batch_image_feat,input_idx:input_idx,label:batch_answer_label.astype( 'int32' ).flatten()  }  )
+            sess.run( optimizer , feed_dict={  image_feat:batch_image_feat,input_idx:input_idx,label:batch_answer_label.astype( 'int32' ).flatten()  }  )
+            cost= sess.run( cost , feed_dict={ image_feat:batch_image_feat,input_idx:input_idx,label:batch_answer_label.astype( 'int32' ).flatten()  }  )
+            accu=  sess.run( accu , feed_dict={ image_feat:batch_image_feat,input_idx:input_idx,label:batch_answer_label.astype( 'int32' ).flatten()  }  )
 
             # output_norm = f_output_grad_norm()
             # logger.info(output_norm)

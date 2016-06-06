@@ -27,17 +27,21 @@ def build_model( options  ):
     n_common_feat=options[ 'n_common_feat' ]
     n_output=options[ 'n_output' ]
     n_attention=options[ 'n_attention' ]
-
+    max_length=options['max_length']
     with tf.Graph().as_default():
     # get the transformed image features
         #h_0=tf.placeholder( shape=( None,n_dim ) , dtype=tf.float32  )
         #c_0=tf.placeholder( shape=( None,n_dim ) , dtype=tf.float32  )
 
-        image_feat=tf.placeholder( shape=( None , n_image_feat  ) ,dtype=tf.float32  )
+        image_feat=tf.placeholder( shape=( batch_size , n_image_feat  ) ,dtype=tf.float32  )
 
-        max_length=tf.placeholder(tf.int32)
+        #max_length=tf.placeholder(tf.int32)
+
+        print("max_length")
+        print(max_length)
+
         # index of the input
-        input_idx=tf.placeholder( shape=( None, None ) ,dtype=tf.int32)
+        input_idx=tf.placeholder( shape=( batch_size, max_length ) ,dtype=tf.int32)
 
         #label as input
         label=tf.placeholder( shape=batch_size,dtype=tf.int32)
@@ -49,15 +53,18 @@ def build_model( options  ):
 
         # input embedding
         w_emb= tf.Variable(tf.random_uniform([n_words, n_emb], -1.0, 1.0),name="Embedding_Matrix")
+        input_emb=tf.nn.embedding_lookup( w_emb, input_idx )
+        #print( "Input Index Shape :"  )
 
-        input_emb=w_emb[ input_idx ]
-
+        #print(input_idx.get_shape())
+        #input_emb=w_emb[ input_idx ]
+        #input_emb=tf.slice( w_emb,input_idx,[1] )
         if options['sent_drop']:
             input_emb=tflearn.dropout(input_emb,drop_ratio)
 
-        h_encode=tflearn.lstm( input_emb , n_emb  )
+        h_encode=tflearn.lstm( input_emb , n_emb , return_seq=False  )
 
-        h_encode=h_encode[-1]  #-- check the dimension
+        #h_encode=h_encode[-1]  #-- check the dimension
 
         image_feat_down=tflearn.fully_connected( image_feat ,n_dim) # dim -- has to be figured )
 
@@ -65,15 +72,14 @@ def build_model( options  ):
 
         h_encode_attention_1=tflearn.fully_connected( h_encode , n_attention) # dim -- has to be figured  )
 
-        combined_feat_attention_1 = image_feat_attention_1 + \
-                                    h_encode_attention_1[:, None, :]
+        combined_feat_attention_1 = image_feat_attention_1 + h_encode_attention_1
 
         if options['use_attention_drop']:
             combined_feat_attention_1 = tflearn.dropout(combined_feat_attention_1,drop_ratio)
 
         combined_feat_attention_1 = tflearn.fully_connected(combined_feat_attention_1 , 1) # dim -- to be determined  )
-        prob_attention_1 = tf.nn.softmax(combined_feat_attention_1[:, :, 0])
-        image_feat_ave_1 = (prob_attention_1[:, :, None] * image_feat_down).sum(axis=1)
+        prob_attention_1 = tf.nn.softmax(combined_feat_attention_1)
+        image_feat_ave_1 = (prob_attention_1 * image_feat_down).sum(axis=1)
 
         combined_hidden_1 = image_feat_ave_1 + h_encode
 

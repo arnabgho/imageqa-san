@@ -2,11 +2,14 @@
 
 import numpy as np
 
-def process_batch(batch_question, reverse=False):
+def process_batch(options,batch_question, reverse=False):
     question_length = []
     for question in batch_question:
         question_length.append(len(question))
     max_length = max(question_length)
+    print("Data Processing Max Length:")
+    print(max_length)
+    options['max_length']=max(options['max_length'],max_length)
     input_idx = np.zeros((max_length, batch_question.shape[0]), dtype='int32')
     input_mask = np.zeros((max_length, batch_question.shape[0]), dtype='float32')
     for i, question in enumerate(batch_question):
@@ -15,7 +18,7 @@ def process_batch(batch_question, reverse=False):
         else:
             input_idx[0:question_length[i], i] = question[0:question_length[i]]
         input_mask[0:question_length[i], i] = 1.0
-    return input_idx, input_mask , max_length
+    return input_idx.T, input_mask.T , max_length
 
 def get_label_idx(n_output, batch_size):
     label_idx = np.zeros((n_output, batch_size), dtype='int32')
